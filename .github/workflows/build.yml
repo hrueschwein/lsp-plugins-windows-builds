@@ -1,0 +1,77 @@
+name: Build LSP Plugins (Windows VST3 UI)
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      # 1. Получение исходников LSP Plugins (вместо checkout текущего репозитория)
+      - name: Clone LSP Plugins
+        shell: pwsh
+        run: |
+          git clone --recursive https://github.com/lsp-plugins/lsp-plugins.git lsp-plugins
+
+      # 2. Получение VST3 SDK
+      - name: Clone VST3 SDK
+        shell: pwsh
+        run: |
+          git clone --recursive --depth 1 https://github.com/steinbergmedia/vst3sdk.git vst3sdk
+
+      # 3. Установка MSYS2 и зависимостей
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-fontconfig
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-expat
+            mingw-w64-x86_64-pixman
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-glib2
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-libxslt
+            mingw-w64-x86_64-harfbuzz
+
+      # 4. Конфигурация и сборка по инструкции из README LSP Plugins
+      - name: Configure and Build
+        shell: msys2 {0}
+        working-directory: lsp-plugins
+        run: |
+          export VST3_SDK_DIR="${{ github.workspace }}/vst3sdk"
+          make config FEATURES='vst3 ui' PREFIX=/usr
+          make -j$(nproc)
+
+      # 5. Установка (создаёт готовую структуру плагинов)
+      - name: Install
+        shell: msys2 {0}
+        working-directory: lsp-plugins
+        run: |
+          make install DESTDIR="${{ github.workspace }}/install"
+
+      # 6. Архивация результатов
+      - name: Prepare artifacts
+        shell: pwsh
+        run: |
+          Compress-Archive -Path install/* -DestinationPath lsp-plugins-windows-vst3-ui.zip
+
+      # 7. Загрузка артефакта
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsp-plugins-windows-vst3-ui
+          path: lsp-plugins-windows-vst3-ui.zip
