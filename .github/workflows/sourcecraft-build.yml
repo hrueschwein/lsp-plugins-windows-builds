@@ -1,0 +1,73 @@
+name: Build LSP Plugins (UI, VST3) for Windows
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LSP_PLUGINS_REPO: https://github.com/sadko4u/lsp-plugins.git
+
+jobs:
+  build:
+    name: Build LSP Plugins VST3 (UI) on Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout builder repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW-W64 (GCC toolchain)
+        run: choco install mingw -y --no-progress
+
+      - name: Install PHP (build toolchain dependency)
+        run: choco install php -y --no-progress
+
+      - name: Add build tools to PATH
+        run: |
+          echo "/c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin" >> "$GITHUB_PATH"
+          php_path="$(ls -d /c/tools/php* 2>/dev/null | head -n1 || true)"
+          if [ -n "$php_path" ]; then
+            echo "${php_path}" >> "$GITHUB_PATH"
+          fi
+
+      - name: Fetch LSP Plugins sources
+        run: git clone --depth 1 "$LSP_PLUGINS_REPO"
+
+      - name: Clean previous build state
+        working-directory: lsp-plugins
+        run: make clean
+
+      - name: Configure build (VST3 + UI)
+        working-directory: lsp-plugins
+        run: make config FEATURES='vst3 ui'
+
+      - name: Fetch source dependencies
+        working-directory: lsp-plugins
+        run: make fetch
+
+      - name: Compile plugins
+        working-directory: lsp-plugins
+        run: make
+
+      - name: Install plugins into INSTALL directory
+        working-directory: lsp-plugins
+        run: make install
+
+      - name: List build artifacts
+        working-directory: lsp-plugins
+        run: find INSTALL -maxdepth 3 -type f | sed 's#^# #'
+
+      - name: Upload VST3 (UI) artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsp-plugins-vst3-ui-windows
+          path: lsp-plugins/INSTALL/
+          if-no-files-found: error
