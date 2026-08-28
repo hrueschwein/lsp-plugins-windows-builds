@@ -1,0 +1,70 @@
+name: Build LSP Plugins (VST3 + UI) for Windows
+
+on:
+  workflow_dispatch:        # ручной запуск
+  schedule:
+    - cron: '0 6 * * 0'     # каждое воскресенье в 6:00 (опционально)
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}    # все шаги выполняются в окружении MSYS2
+
+    steps:
+      # 1. Установка MSYS2 (используем официальный action)
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: |
+            git
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-pango
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-fontconfig
+            # при необходимости добавьте другие пакеты, указанные в README
+
+      # 2. Клонируем репозиторий LSP Plugins
+      - name: Clone LSP Plugins source
+        run: |
+          git clone --depth 1 https://github.com/sadko4u/lsp-plugins.git
+          cd lsp-plugins
+
+      # 3. Сборка VST3-плагинов с UI
+      #    Предполагается, что в README указан скрипт ./make.sh или ./build_windows.sh
+      #    Здесь используется команда, которая собирает только VST3 (цель vst3)
+      - name: Build VST3 plugins
+        run: |
+          cd lsp-plugins
+          # если используется ./make.sh, то с параметром vst3
+          ./make.sh vst3
+          # альтернативно, если есть отдельный скрипт для Windows:
+          # ./build_windows.sh --vst3 --ui
+          # или же стандартный make:
+          # make -f Makefile.win vst3
+
+      # 4. Упаковка артефактов (все .vst3 папки)
+      - name: Archive built VST3 plugins
+        run: |
+          mkdir -p artifacts
+          find lsp-plugins -type d -name "*.vst3" -exec cp -r {} artifacts/ \;
+          # Если плагины собираются в другие каталоги, скорректируйте путь
+          # Например, обычно это lsp-plugins/bin/vst3/
+          # можно просто заархивировать всю папку bin/vst3
+          # 7z a -tzip lsp-plugins-vst3-windows.zip artifacts/*
+          cd artifacts
+          7z a -tzip ../lsp-plugins-vst3-windows.zip *
+        shell: msys2 {0}
+
+      # 5. Сохранение артефакта в GitHub
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsp-plugins-vst3-windows
+          path: lsp-plugins-vst3-windows.zip
