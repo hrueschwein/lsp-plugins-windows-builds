@@ -63,7 +63,7 @@ jobs:
 
       - name: List build artifacts
         working-directory: lsp-plugins
-        run: find INSTALL -maxdepth 3 -type f | sed 's#^# #'
+        run: find INSTALL -maxdepth 3 -type f | awk '{ print " " $0 }'
 
       - name: Upload VST3 (UI) artifacts
         uses: actions/upload-artifact@v4
